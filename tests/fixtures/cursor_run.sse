@@ -1,0 +1,20 @@
+event: status
+data: {"status":"running"}
+
+event: assistant
+data: {"text": "The worker died. "}
+
+event: thinking
+data: {"text": "secret-chain-of-thought"}
+
+event: assistant
+data: {"text": "I would restart it."}
+
+event: tool_call
+data: {"name": "deploy", "status": "started", "callId": "c1", "args": {"cmd": "restart"}}
+
+event: tool_call
+data: {"name": "phase", "status": "completed", "callId": "c2", "args": {"value": "execute", "issue": "worker died", "solution": "restart it"}}
+
+event: result
+data: {"status": "ok"}

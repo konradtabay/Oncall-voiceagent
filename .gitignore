@@ -1,1 +1,9 @@
 .DS_Store
+.venv/
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+*.sqlite3
+oncall.sqlite3
