@@ -49,17 +49,36 @@ class Store:
                 incident_id TEXT NOT NULL,
                 text TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS call_transcripts (
+                incident_id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL DEFAULT '',
+                summary TEXT NOT NULL DEFAULT '',
+                transcript_text TEXT NOT NULL DEFAULT '',
+                transcript_json TEXT NOT NULL DEFAULT '{}',
+                fetched_at TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS call_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                incident_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
             """
         )
         self._conn.commit()
+        self._migrate_incidents()
 
     def insert_incident(self, incident: Incident) -> None:
         self._conn.execute(
             """
             INSERT INTO incidents (
                 id, state, to_number, summary, logs, verify_target,
-                brief, fix, armed, fixing, agent_id, call_sid, run_locked, issues
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                brief, fix, armed, fixing, agent_id, call_sid,
+                conversation_id, run_locked, issues
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             self._incident_row(incident),
         )
@@ -84,7 +103,8 @@ class Store:
             UPDATE incidents SET
                 state = ?, to_number = ?, summary = ?, logs = ?,
                 verify_target = ?, brief = ?, fix = ?, armed = ?,
-                fixing = ?, agent_id = ?, call_sid = ?, run_locked = ?,
+                fixing = ?, agent_id = ?, call_sid = ?,
+                conversation_id = ?, run_locked = ?,
                 issues = ?
             WHERE id = ?
             """,
@@ -100,6 +120,7 @@ class Store:
                 int(incident.fixing),
                 incident.agent_id,
                 incident.call_sid,
+                incident.conversation_id,
                 int(incident.run_locked),
                 json.dumps(incident.issues),
                 incident.id,
@@ -202,6 +223,70 @@ class Store:
         )
         self._conn.commit()
 
+    def _migrate_incidents(self) -> None:
+        cols = {
+            row[1] for row in self._conn.execute("PRAGMA table_info(incidents)")
+        }
+        if "conversation_id" not in cols:
+            self._conn.execute(
+                "ALTER TABLE incidents ADD COLUMN conversation_id TEXT NOT NULL DEFAULT ''"
+            )
+            self._conn.commit()
+
+    def append_call_log(self, incident_id: str, kind: str, body: str) -> None:
+        self._conn.execute(
+            "INSERT INTO call_log (incident_id, kind, body) VALUES (?, ?, ?)",
+            (incident_id, kind, body),
+        )
+        self._conn.commit()
+
+    def save_call_transcript(
+        self,
+        incident_id: str,
+        conversation_id: str,
+        summary: str,
+        transcript_text: str,
+        transcript_json: str,
+    ) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO call_transcripts (
+                incident_id, conversation_id, summary, transcript_text,
+                transcript_json, fetched_at
+            ) VALUES (?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(incident_id) DO UPDATE SET
+                conversation_id = excluded.conversation_id,
+                summary = excluded.summary,
+                transcript_text = excluded.transcript_text,
+                transcript_json = excluded.transcript_json,
+                fetched_at = excluded.fetched_at
+            """,
+            (
+                incident_id,
+                conversation_id,
+                summary,
+                transcript_text,
+                transcript_json,
+            ),
+        )
+        self._conn.commit()
+
+    def get_call_transcript(self, incident_id: str) -> Optional[dict]:
+        row = self._conn.execute(
+            "SELECT * FROM call_transcripts WHERE incident_id = ?",
+            (incident_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def list_call_logs(self, incident_id: str) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT kind, body, created_at FROM call_log WHERE incident_id = ? ORDER BY id",
+            (incident_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def pop_turn(self, incident_id: str) -> Optional[str]:
         row = self._conn.execute(
             """
@@ -233,12 +318,14 @@ class Store:
             int(incident.fixing),
             incident.agent_id,
             incident.call_sid,
+            incident.conversation_id,
             int(incident.run_locked),
             json.dumps(incident.issues),
         )
 
     @staticmethod
     def _row_to_incident(row: sqlite3.Row) -> Incident:
+        keys = row.keys()
         return Incident(
             id=row["id"],
             state=row["state"],
@@ -252,6 +339,7 @@ class Store:
             fixing=bool(row["fixing"]),
             agent_id=row["agent_id"],
             call_sid=row["call_sid"],
+            conversation_id=row["conversation_id"] if "conversation_id" in keys else "",
             run_locked=bool(row["run_locked"]),
             issues=json.loads(row["issues"] or "[]"),
         )

@@ -38,6 +38,12 @@ class SmsOut:
 class Answered:
     incident_id: str
     call_sid: str
+    conversation_id: str = ""
+
+
+@dataclass(frozen=True)
+class CallEnded:
+    incident_id: str
 
 
 @dataclass(frozen=True)
@@ -59,4 +65,4 @@ class Utterance:
 
 
 Command = Union[Dial, Hangup, SmsOut]
-Event = Union[Answered, Missed, SmsIn, Utterance]
+Event = Union[Answered, Missed, SmsIn, Utterance, CallEnded]

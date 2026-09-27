@@ -7,8 +7,11 @@ from urllib.parse import quote
 
 from fastapi.responses import Response
 
+import re
+
 from oncall.seam import (
     Answered,
+    CallEnded,
     Dial,
     Hangup,
     Missed,
@@ -19,11 +22,17 @@ from oncall.seam import (
 from oncall.telephony.ports import ElevenLabsPort, TwilioPort
 
 HANGUP_TWIML = "<Response><Hangup/></Response>"
+_CONVERSATION_ID = re.compile(r'conversation_id" value="(conv_[^"]+)"', re.I)
+
+
+def conversation_id_from_twiml(twiml: str) -> str:
+    match = _CONVERSATION_ID.search(twiml)
+    return match.group(1) if match else ""
 MISS_STATUSES = frozenset({"no-answer", "busy", "failed", "canceled"})
 ANSWER_STATUSES = frozenset({"in-progress", "answered"})
 HANGUP_REASONS = frozenset({"close", "miss", "drop"})
 
-OnEvent = Callable[[Answered | Missed | SmsIn], str | None]
+OnEvent = Callable[[Answered | Missed | SmsIn | CallEnded], str | None]
 
 
 class BadSignature(Exception):
@@ -49,6 +58,7 @@ class Telephony:
         from_number: str = "",
         voice_url: str = "",
         status_url: str = "",
+        public_base_url: str = "",
     ) -> None:
         self.twilio_port = twilio_port
         self.elevenlabs_port = elevenlabs_port
@@ -57,6 +67,7 @@ class Telephony:
         self.from_number = from_number
         self.voice_url = voice_url
         self.status_url = status_url
+        self.public_base_url = public_base_url.strip().rstrip("/")
         self._by_sid: dict[str, str] = {}
         self._sid_by_incident: dict[str, str] = {}
         self._to_by_incident: dict[str, str] = {}
@@ -126,7 +137,14 @@ class Telephony:
                 str(form.get("From") or ""),
                 str(form.get("To") or ""),
             )
-            self.on_event(Answered(incident_id=incident_id, call_sid=call_sid))
+            conv_id = conversation_id_from_twiml(twiml)
+            self.on_event(
+                Answered(
+                    incident_id=incident_id,
+                    call_sid=call_sid,
+                    conversation_id=conv_id,
+                )
+            )
             return twiml_body(twiml)
 
         return twiml_hangup()
@@ -153,7 +171,9 @@ class Telephony:
             )
             return
 
-        # completed and other statuses: ignore
+        if call_status == "completed":
+            self.on_event(CallEnded(incident_id=incident_id))
+            return
 
     def handle_sms(self, form: dict, signature_ok: bool) -> str | None:
         if not signature_ok:

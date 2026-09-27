@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from oncall.incident.voice import voice_agent, voice_compact
+
 
 class TwilioRestAdapter:
     """Twilio REST client adapter.
@@ -55,6 +57,9 @@ class TwilioRestAdapter:
     def send_sms(self, to: str, from_: str, body: str) -> None:
         self._client.messages.create(to=to, from_=from_, body=body)
 
+    def redirect_call(self, call_sid: str, url: str) -> None:
+        self._client.calls(call_sid).update(url=url, method="POST")
+
 
 class ElevenLabsRegisterAdapter:
     """POSTs to ElevenLabs convai Twilio register-call."""
@@ -92,8 +97,12 @@ class ElevenLabsRegisterAdapter:
             "conversation_initiation_client_data": {
                 "dynamic_variables": {
                     "incident_id": incident_id,
-                    "brief": context.get("brief", "")[:1500],
-                    "fix": context.get("fix", "")[:800],
+                    "brief": voice_agent(
+                        context.get("brief", "") or context.get("summary", "")
+                    ),
+                    "fix": voice_agent(context.get("fix", "")),
+                    "project": voice_agent(context.get("project", ""), max_chars=1200),
+                    "opening": context.get("opening", ""),
                 },
             },
         }

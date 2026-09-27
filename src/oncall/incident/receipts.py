@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 
+def _short(text: str, limit: int = 72) -> str:
+    line = " ".join((text or "").split()).strip().rstrip(".")
+    if not line:
+        return "the incident"
+    if len(line) <= limit:
+        return line
+    cut = line[:limit].rsplit(" ", 1)[0]
+    return cut.rstrip(".,;:")
+
+
 def start_receipt(issue: str, solution: str) -> str:
     """Short notice that a Fix has started. Must name the issue and solution."""
-    return f"Starting a fix for {issue}: {solution}."
+    return f"Fix started.\n{_short(issue)}\n{_short(solution, 90)}"
 
 
 def closing_receipt(issues: list[dict]) -> str:

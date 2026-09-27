@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from oncall.config import Settings
+from oncall.demo import PAGE
 from oncall.incident.machine import Machine
 from oncall.incident.service import IncidentService, sse_bytes
 from oncall.incident.store import Store
@@ -50,6 +51,40 @@ def create_app(
             public_base_url=base or None,
         )
 
+    @app.get("/demo")
+    async def demo_page() -> HTMLResponse:
+        return HTMLResponse(PAGE, headers={"Cache-Control": "no-store"})
+
+    @app.get("/demo/state")
+    async def demo_state(request: Request) -> dict:
+        current: IncidentService = request.app.state.service
+        return {
+            "stage": current.demo.stage(),
+            "lines": current.demo.lines(),
+            "messages": current.demo.messages(),
+            "epoch": current.demo.epoch(),
+        }
+
+    @app.post("/demo/run")
+    async def demo_run(request: Request) -> JSONResponse:
+        body: dict = {}
+        if request.headers.get("content-type", "").startswith("application/json"):
+            body = await request.json()
+        number = str(body.get("to_number") or os.environ.get("MAINTAINER_NUMBER") or "")
+        if not number:
+            return JSONResponse({"error": "no number"}, status_code=400)
+        current: IncidentService = request.app.state.service
+        if current.demo.stage() in {"error", "fixing"}:
+            current.reset_demo()
+        current.start_demo(number)
+        return JSONResponse({"ok": True, "stage": current.demo.stage()})
+
+    @app.post("/demo/reset")
+    async def demo_reset(request: Request) -> dict:
+        current: IncidentService = request.app.state.service
+        current.reset_demo()
+        return {"ok": True, "stage": current.demo.stage()}
+
     @app.post("/alerts")
     async def alerts(request: Request) -> dict:
         body = await request.json()
@@ -64,6 +99,14 @@ def create_app(
         )
         return {"incident_id": incident.id, "state": incident.state}
 
+    @app.get("/incidents/{incident_id}/transcript")
+    async def incident_transcript(incident_id: str, request: Request) -> dict:
+        current: IncidentService = request.app.state.service
+        row = current.transcript_for(incident_id)
+        if row is None:
+            return {"incident_id": incident_id, "transcript": None}
+        return row
+
     @app.post("/elevenlabs/phase")
     async def elevenlabs_phase(request: Request) -> JSONResponse:
         """Webhook tool for the ElevenLabs conversation agent."""
@@ -77,6 +120,43 @@ def create_app(
             incident_id=str(params.get("incident_id") or ""),
         )
         return JSONResponse(result)
+
+    @app.post("/elevenlabs/updates")
+    async def elevenlabs_updates(request: Request) -> JSONResponse:
+        """Next real fix update for the live call. Empty means stay silent."""
+        body = await request.json()
+        params = body.get("parameters") if isinstance(body.get("parameters"), dict) else body
+        current: IncidentService = request.app.state.service
+        incident_id = current.resolve_voice_incident(
+            str(params.get("incident_id") or "")
+        )
+        demo = bool(incident_id and current.is_demo_incident(incident_id))
+        timeout = 55.0 if demo else 12.0
+        text = current.ready_voice_update(incident_id)
+        if not text and incident_id:
+            text = current.wait_voice_update(incident_id, timeout=timeout)
+        if demo and not text:
+            text = current.ready_voice_update(incident_id)
+        if not text:
+            return JSONResponse(
+                {
+                    "update": "",
+                    "result": (
+                        "No update yet. Say nothing and call updates again. "
+                        "Keep calling updates until you get the fix result text. "
+                        "If they just asked you something, answer that, then call updates again."
+                    ),
+                }
+            )
+        return JSONResponse(
+            {
+                "update": text,
+                "result": (
+                    f"You must speak this out loud now, every sentence, ending with the last one: {text} "
+                    "Do not skip_turn. This is the fix completing."
+                ),
+            }
+        )
 
     @app.post("/v1/chat/completions/chat/completions")
     async def chat_completions_doubled(request: Request) -> StreamingResponse:
@@ -112,10 +192,7 @@ def build_default_app() -> FastAPI:
         machine_detection=settings.twilio_machine_detection or None,
     )
     def _call_context(incident_id: str) -> dict[str, str]:
-        row = store.get(incident_id)
-        if row is None:
-            return {}
-        return {"brief": row.brief, "fix": row.fix}
+        return service_box["service"].call_context(incident_id)
 
     eleven = ElevenLabsRegisterAdapter(
         settings.elevenlabs_api_key,
@@ -135,6 +212,7 @@ def build_default_app() -> FastAPI:
         from_number=settings.twilio_from_number,
         voice_url=f"{settings.public_base_url}/twilio/voice",
         status_url=f"{settings.public_base_url}/twilio/status",
+        public_base_url=settings.public_base_url,
     )
     service = IncidentService(
         store,
@@ -146,6 +224,7 @@ def build_default_app() -> FastAPI:
         ),
         telephony,
         repo_url=settings.cursor_repo_url,
+        elevenlabs_api_key=settings.elevenlabs_api_key,
     )
     service_box["service"] = service
     return create_app(

@@ -57,6 +57,13 @@ def signature_ok(
     return RequestValidator(token).validate(url, params, signature)
 
 
+def twilio_signature_params(request: Request, form: dict[str, str]) -> dict[str, str]:
+    """POST: signed body only (query is in the validation URL). GET: signed URL only."""
+    if request.method == "GET":
+        return {}
+    return dict(form)
+
+
 def reject_bad_signature() -> Response:
     """HTTP 403 response for failed Twilio signature checks."""
     return Response(content="Forbidden", status_code=403)
@@ -81,7 +88,7 @@ async def twilio_voice(request: Request) -> Response:
     form = await _read_form(request)
     ok = signature_ok(
         twilio_validation_url(request),
-        form,
+        twilio_signature_params(request, form),
         request.headers.get("X-Twilio-Signature", ""),
         _token(),
     )
@@ -102,7 +109,7 @@ async def twilio_status(request: Request) -> Response:
     form = await _read_form(request)
     ok = signature_ok(
         twilio_validation_url(request),
-        form,
+        twilio_signature_params(request, form),
         request.headers.get("X-Twilio-Signature", ""),
         _token(),
     )
@@ -124,7 +131,7 @@ async def twilio_sms(request: Request) -> Response:
     form = await _read_form(request)
     ok = signature_ok(
         twilio_validation_url(request),
-        form,
+        twilio_signature_params(request, form),
         request.headers.get("X-Twilio-Signature", ""),
         _token(),
     )

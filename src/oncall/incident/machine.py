@@ -42,10 +42,14 @@ class Machine:
         self.store.save(incident)
         return [Dial(incident_id, incident.to_number)]
 
-    def on_answered(self, incident_id: str, call_sid: str) -> list[Command]:
+    def on_answered(
+        self, incident_id: str, call_sid: str, conversation_id: str = ""
+    ) -> list[Command]:
         incident = self._require(incident_id)
         incident.state = "in_call"
         incident.call_sid = call_sid
+        if conversation_id:
+            incident.conversation_id = conversation_id
         self.store.save(incident)
         return []
 
@@ -83,8 +87,7 @@ class Machine:
             return []
 
         if phase == "execute":
-            if not incident.armed:
-                incident.armed = True
+            if incident.fixing:
                 self.store.save(incident)
                 return []
             incident.armed = False

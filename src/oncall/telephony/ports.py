@@ -28,6 +28,10 @@ class TwilioPort(Protocol):
         """Send an outbound SMS."""
         ...
 
+    def redirect_call(self, call_sid: str, url: str) -> None:
+        """Point an in-progress call at new TwiML (e.g. hold music)."""
+        ...
+
 
 class ElevenLabsPort(Protocol):
     def register_call(

@@ -101,6 +101,7 @@ class FakeTwilio:
         self.calls: list[str] = []
         self.hungup: list[str] = []
         self.sms: list[str] = []
+        self.redirects: list[dict] = []
         self._n = 0
 
     def create_call(self, to: str, from_: str, voice_url: str, status_url: str) -> str:
@@ -114,6 +115,9 @@ class FakeTwilio:
 
     def send_sms(self, to: str, from_: str, body: str) -> None:
         self.sms.append(body)
+
+    def redirect_call(self, call_sid: str, url: str) -> None:
+        self.redirects.append({"sid": call_sid, "url": url})
 
 
 class FakeEleven:
@@ -147,6 +151,13 @@ def _world(tmp_path):
     return service, twilio, telephony, TestClient(app)
 
 
+def test_voice_update_ignores_still_working(tmp_path):
+    service, *_ = _world(tmp_path)
+    service.publish_voice_update("inc-1", "Still working.")
+    service.publish_voice_update("inc-1", "The worker is back.")
+    assert service.wait_voice_update("inc-1", timeout=0.2) == "The worker is back."
+
+
 def test_alert_dials_after_diagnosis(tmp_path):
     service, twilio, _telephony, client = _world(tmp_path)
     response = client.post(
@@ -171,6 +182,7 @@ def test_alert_dials_after_diagnosis(tmp_path):
 
 def test_call_stays_up_until_verified_then_receipts(tmp_path):
     service, twilio, telephony, client = _world(tmp_path)
+    service._cursor_async = False
     client.post(
         "/alerts",
         json={
@@ -195,37 +207,23 @@ def test_call_stays_up_until_verified_then_receipts(tmp_path):
     assert first.status_code == 200
     body = first.text
     assert "Worker died." in body
-    assert "Anything else" in body
+    assert "let me know" in body.lower()
     assert twilio.hungup == []
     assert twilio.sms == []
     assert service.store.get("inc-1").armed is False
 
     client.post(
         "/v1/chat/completions",
-        json={"messages": [{"role": "user", "content": "do it"}]},
-    )
-    assert service.store.get("inc-1").armed is True
-
-    client.post(
-        "/v1/chat/completions",
-        json={"messages": [{"role": "user", "content": "no"}]},
+        json={"messages": [{"role": "user", "content": "yes"}]},
     )
     assert any("worker died" in message.lower() for message in twilio.sms)
-    assert twilio.hungup == []
-    assert service.store.get("inc-1").state == "in_call"
-
-    client.post(
-        "/v1/chat/completions",
-        json={"messages": [{"role": "user", "content": "check"}]},
-    )
     assert twilio.hungup == ["CA1"]
     closing = twilio.sms[-1]
-    assert "worker died" in closing.lower()
-    assert "succeeded" in closing
+    assert "succeeded" in closing.lower()
     assert service.store.get("inc-1").state == "closed"
 
 
-def test_elevenlabs_phase_tool_wakes_cursor_only_after_confirm(tmp_path):
+def test_elevenlabs_phase_execute_once_starts_fix(tmp_path):
     service, twilio, telephony, client = _world(tmp_path)
     service._cursor_async = False
     client.post(
@@ -242,16 +240,12 @@ def test_elevenlabs_phase_tool_wakes_cursor_only_after_confirm(tmp_path):
         {"CallSid": "CA1", "AnsweredBy": "human", "From": "+15550001111", "To": "+15555550100"},
         True,
     )
-    first = client.post("/elevenlabs/phase", json={"value": "execute", "incident_id": "inc-1"})
-    assert first.status_code == 200
-    assert "anything else" in first.json()["result"].lower()
-    assert twilio.sms == []
-    assert service.cursor.runs  # diagnose only
     diagnose_runs = len(service.cursor.runs)
-
-    second = client.post("/elevenlabs/phase", json={"value": "execute", "incident_id": "inc-1"})
-    assert second.status_code == 200
-    assert "starting the fix" in second.json()["result"].lower()
+    response = client.post(
+        "/elevenlabs/phase", json={"value": "execute", "incident_id": "inc-1"}
+    )
+    assert response.status_code == 200
+    assert "i'll keep you updated" in response.json()["result"].lower()
     assert len(service.cursor.runs) == diagnose_runs + 1
     assert any("worker died" in message.lower() for message in twilio.sms)
     assert twilio.hungup == ["CA1"]

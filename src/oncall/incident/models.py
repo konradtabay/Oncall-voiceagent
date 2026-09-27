@@ -30,6 +30,7 @@ class Incident:
     fixing: bool = False
     agent_id: str = ""
     call_sid: str = ""
+    conversation_id: str = ""
     run_locked: bool = False
     issues: list = field(default_factory=list)
 

@@ -11,11 +11,9 @@ class DeployGuard:
         self.armed = False
 
     def on_phase(self, value: str) -> None:
-        if value == "execute" and self.armed:
+        if value == "execute":
             self.fix_started = True
             self.armed = False
-        elif value == "execute":
-            self.armed = True
         elif value == "talking":
             self.armed = False
         elif value == "failed":

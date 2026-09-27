@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from oncall.seam import Answered, Dial, Hangup, Missed, SmsIn, SmsOut
+from oncall.seam import Answered, CallEnded, Dial, Hangup, Missed, SmsIn, SmsOut
 from oncall.telephony import (
     Telephony,
     bind,
@@ -43,6 +43,9 @@ class FakeTwilio:
 
     def send_sms(self, to: str, from_: str, body: str) -> None:
         self.sms.append({"to": to, "from_": from_, "body": body})
+
+    def redirect_call(self, call_sid: str, url: str) -> None:
+        pass
 
 
 @dataclass
@@ -147,14 +150,14 @@ def test_status_miss_reasons():
         assert events == [Missed("inc-1", reason)]
 
 
-def test_status_completed_emits_nothing():
+def test_status_completed_emits_call_ended():
     tel, _twilio, _eleven, events = _make()
     sid = tel.dial(Dial("inc-1", "+15555550100"))
     tel.handle_status(
         {"CallSid": sid, "CallStatus": "completed"},
         signature_ok=True,
     )
-    assert events == []
+    assert events == [CallEnded(incident_id="inc-1")]
 
 
 def test_reject_bad_signature_returns_403():

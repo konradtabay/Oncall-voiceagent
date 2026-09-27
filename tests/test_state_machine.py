@@ -38,20 +38,19 @@ def _bring_to_in_call(machine: Machine, incident: Incident) -> Incident:
     return machine.store.get(incident.id)
 
 
-def test_execute_then_talking_does_not_emit_start_receipt(tmp_path: Path):
+def test_execute_then_talking_does_not_emit_another_start_receipt(tmp_path: Path):
     store = _store(tmp_path)
     machine = Machine(store)
     incident = _bring_to_in_call(machine, _incident())
 
-    cmds = machine.on_phase(incident.id, "execute")
-    assert cmds == []
+    cmds = machine.on_phase(incident.id, "execute", issue="down", solution="restart")
+    assert any(isinstance(c, SmsOut) and c.kind == "start_receipt" for c in cmds)
     loaded = store.get(incident.id)
-    assert loaded.armed is True
+    assert loaded.fixing is True
+    assert loaded.armed is False
 
     cmds = machine.on_phase(incident.id, "talking")
     assert cmds == []
-    loaded = store.get(incident.id)
-    assert loaded.armed is False
     assert not any(isinstance(c, SmsOut) and c.kind == "start_receipt" for c in cmds)
 
 
@@ -60,13 +59,13 @@ def test_execute_twice_emits_one_start_receipt_no_hangup(tmp_path: Path):
     machine = Machine(store)
     incident = _bring_to_in_call(machine, _incident())
 
-    assert machine.on_phase(incident.id, "execute") == []
     cmds = machine.on_phase(
         incident.id,
         "execute",
         issue="API is down",
         solution="restart the api process",
     )
+    assert machine.on_phase(incident.id, "execute") == []
 
     receipts = [c for c in cmds if isinstance(c, SmsOut) and c.kind == "start_receipt"]
     hangups = [c for c in cmds if isinstance(c, Hangup)]
@@ -86,7 +85,6 @@ def test_failed_from_in_call_stays_in_call_no_closing(tmp_path: Path):
     store = _store(tmp_path)
     machine = Machine(store)
     incident = _bring_to_in_call(machine, _incident())
-    machine.on_phase(incident.id, "execute")
     machine.on_phase(incident.id, "execute", issue="down", solution="restart")
 
     cmds = machine.on_phase(
@@ -106,19 +104,11 @@ def test_verified_hangup_close_and_closing_receipt(tmp_path: Path):
     store = _store(tmp_path)
     machine = Machine(store)
     incident = _bring_to_in_call(machine, _incident())
-    machine.on_phase(incident.id, "execute")
     machine.on_phase(
         incident.id,
         "execute",
         issue="disk full",
         solution="clear /tmp",
-    )
-    machine.on_phase(incident.id, "execute")
-    machine.on_phase(
-        incident.id,
-        "execute",
-        issue="cache warm",
-        solution="flush redis",
     )
 
     cmds = machine.on_phase(incident.id, "verified")
@@ -130,8 +120,6 @@ def test_verified_hangup_close_and_closing_receipt(tmp_path: Path):
     body = receipts[0].body.lower()
     assert "disk full" in body
     assert "clear /tmp" in body
-    assert "cache warm" in body
-    assert "flush redis" in body
     assert "succeeded" in body
 
     loaded = store.get(incident.id)
@@ -170,7 +158,6 @@ def test_start_receipt_does_not_set_text_session(tmp_path: Path):
     store = _store(tmp_path)
     machine = Machine(store)
     incident = _bring_to_in_call(machine, _incident())
-    machine.on_phase(incident.id, "execute")
     machine.on_phase(incident.id, "execute", issue="x", solution="y")
     loaded = store.get(incident.id)
     assert loaded.state == "in_call"
@@ -181,15 +168,14 @@ def test_on_sms_during_in_call_enqueues_follow_up(tmp_path: Path):
     store = _store(tmp_path)
     machine = Machine(store)
     incident = _bring_to_in_call(machine, _incident())
-    machine.on_phase(incident.id, "execute")
-    assert store.get(incident.id).armed is True
+    machine.on_phase(incident.id, "execute", issue="x", solution="y")
 
     classification, cmds = machine.on_sms(incident.id, "send the error log")
     assert classification == "follow_up"
     assert cmds == []
     loaded = store.get(incident.id)
     assert loaded.state == "in_call"
-    assert loaded.armed is True
+    assert loaded.fixing is True
     assert store.pop_turn(incident.id) == "send the error log"
 
 
@@ -207,7 +193,6 @@ def test_second_incident_queued_then_promoted_after_verified(tmp_path: Path):
     assert store.get("inc-2") is None
     assert store.active().id == "inc-1"
 
-    machine.on_phase(first.id, "execute")
     machine.on_phase(first.id, "execute", issue="a", solution="b")
     machine.on_phase(first.id, "verified")
     assert store.get("inc-1").state == "closed"
@@ -224,7 +209,6 @@ def test_phase_drop_from_in_call_no_closing_receipt(tmp_path: Path):
     store = _store(tmp_path)
     machine = Machine(store)
     incident = _bring_to_in_call(machine, _incident())
-    machine.on_phase(incident.id, "execute")
     machine.on_phase(incident.id, "execute", issue="x", solution="y")
 
     cmds = machine.on_phase(incident.id, "drop")

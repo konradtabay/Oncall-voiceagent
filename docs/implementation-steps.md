@@ -242,6 +242,13 @@ Manual equivalents:
 
 **Live call** (human): answer → hear Brief/Fix → Execute → stay on line through Verify → closing SMS. See [fixtures/staging/README.md](../fixtures/staging/README.md).
 
+**Review call transcripts** (ElevenLabs stores audio + transcript; this app does not yet):
+
+```bash
+python scripts/fetch_transcripts.py
+# or ElevenLabs → Agents → your agent → Conversation history
+```
+
 ---
 
 ## Related docs

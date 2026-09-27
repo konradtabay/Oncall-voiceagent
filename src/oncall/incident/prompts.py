@@ -11,7 +11,11 @@ AGENT_PROMPT = (
 )
 
 DIAGNOSE_INSTRUCTION = (
-    "Write a Brief and one Fix. Do not change the server."
+    "Do not change the server. "
+    "Reply with exactly two lines and nothing else. "
+    "Line 1 must be: Brief: <one short spoken sentence, under 25 words, what broke>. "
+    "Line 2 must be: Fix: <one short spoken sentence, under 25 words, the one fix>. "
+    "No markdown, headings, or bullet lists."
 )
 
 PHASE_TOOL = {

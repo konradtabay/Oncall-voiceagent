@@ -24,26 +24,17 @@ def test_diagnose_instruction_forbids_server_change():
     assert "do not change" in lower or ("not" in lower and "server" in lower)
 
 
-def test_deploy_guard_single_execute_refuses():
+def test_deploy_guard_before_execute_refuses():
     guard = DeployGuard()
-    guard.on_phase("execute")
     assert guard.allow_tool("restart") is False
     guard.on_phase("talking")
     assert guard.allow_tool("deploy") is False
 
 
-def test_deploy_guard_confirmed_execute_allows():
+def test_deploy_guard_execute_allows_deploy():
     guard = DeployGuard()
     guard.on_phase("execute")
-    guard.on_phase("execute")
     assert guard.allow_tool("ssh") is True
-    assert guard.allow_tool("ssh") is True
-    assert guard.allow_tool("ssh") is True
-    # Scripted runner would invoke the tool once; allow stays true after start.
-    invoke_count = 0
-    if guard.allow_tool("ssh"):
-        invoke_count += 1
-    assert invoke_count == 1
     assert guard.fix_started is True
 
 
@@ -53,21 +44,20 @@ def test_diagnose_script_no_deploy():
     assert deployed == []
 
 
-def test_execute_then_talking_refuses_deploy():
+def test_execute_then_talking_still_allows_deploy():
     guard = DeployGuard()
     deployed = run_script(
         guard,
         [("phase", "execute"), ("phase", "talking"), ("tool", "deploy")],
     )
-    assert deployed == []
+    assert deployed == ["deploy"]
 
 
-def test_confirmed_execute_allows_deploy_once():
+def test_execute_allows_deploy_once():
     guard = DeployGuard()
     deployed = run_script(
         guard,
         [
-            ("phase", "execute"),
             ("phase", "execute"),
             ("tool", "deploy"),
         ],
@@ -75,26 +65,17 @@ def test_confirmed_execute_allows_deploy_once():
     assert deployed == ["deploy"]
 
 
-def test_failed_refuses_until_new_confirmed_execute():
+def test_failed_refuses_until_new_execute():
     guard = DeployGuard()
     first = run_script(
         guard,
         [
             ("phase", "execute"),
-            ("phase", "execute"),
             ("tool", "deploy"),
             ("phase", "failed"),
-            ("tool", "restart"),
+            ("tool", "deploy"),
         ],
     )
     assert first == ["deploy"]
-
-    second = run_script(
-        guard,
-        [
-            ("phase", "execute"),
-            ("phase", "execute"),
-            ("tool", "restart"),
-        ],
-    )
+    second = run_script(guard, [("phase", "execute"), ("tool", "restart")])
     assert second == ["restart"]
