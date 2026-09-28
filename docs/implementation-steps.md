@@ -8,13 +8,13 @@ If this map and a component brief disagree about that component, the component b
 
 All five tracks below are **implemented** under `src/oncall/` and covered by `tests/`. You do not need to re-implement them to run the service. Use the component briefs only when **changing** a track or onboarding a parallel coding agent.
 
-| Track | Code | Tests |
-| --- | --- | --- |
-| Seam | [src/oncall/seam.py](../src/oncall/seam.py) | `tests/test_seam.py` |
-| Telephony | [src/oncall/telephony/](../src/oncall/telephony/) | `tests/test_telephony.py` |
-| Incident state | [src/oncall/incident/models.py](../src/oncall/incident/models.py), `store.py`, `machine.py`, `receipts.py` | `tests/test_state_machine.py` |
-| Agent bridge | `cursor_client.py`, `bridge.py`, `prompts.py`, `guard.py` | `tests/test_bridge.py`, `tests/test_agent_contract.py` |
-| Wiring | [src/oncall/app.py](../src/oncall/app.py), [config.py](../src/oncall/config.py), [incident/service.py](../src/oncall/incident/service.py) | `tests/test_wiring.py` |
+| Track          | Code                                                                                                                                      | Tests                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Seam           | [src/oncall/seam.py](../src/oncall/seam.py)                                                                                               | `tests/test_seam.py`                                   |
+| Telephony      | [src/oncall/telephony/](../src/oncall/telephony/)                                                                                         | `tests/test_telephony.py`                              |
+| Incident state | [src/oncall/incident/models.py](../src/oncall/incident/models.py), `store.py`, `machine.py`, `receipts.py`                                | `tests/test_state_machine.py`                          |
+| Agent bridge   | `cursor_client.py`, `bridge.py`, `prompts.py`, `guard.py`                                                                                 | `tests/test_bridge.py`, `tests/test_agent_contract.py` |
+| Wiring         | [src/oncall/app.py](../src/oncall/app.py), [config.py](../src/oncall/config.py), [incident/service.py](../src/oncall/incident/service.py) | `tests/test_wiring.py`                                 |
 
 **Runtime entry point:** `build_default_app()` in [src/oncall/app.py](../src/oncall/app.py) — loads `.env`, wires Twilio + ElevenLabs + Cursor + SQLite, mounts Twilio routes.
 
@@ -52,20 +52,20 @@ python -m pytest -q
 
 ## Environment
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `TWILIO_ACCOUNT_SID` | yes | Twilio REST + webhook signature |
-| `TWILIO_AUTH_TOKEN` | yes | Twilio REST + webhook signature |
-| `TWILIO_FROM_NUMBER` | yes | E.164 outbound call + SMS from |
-| `TWILIO_MACHINE_DETECTION` | no | Set `Enable` for AMD on **this app’s** outbound `calls.create` only; leave unset to disable |
-| `MAINTAINER_NUMBER` | yes | Who to call/text (also pass as `to_number` on `/alerts` if you prefer) |
-| `PUBLIC_BASE_URL` | yes | HTTPS base Twilio and ElevenLabs reach (e.g. ngrok) |
-| `ELEVENLABS_API_KEY` | yes | `register-call` and agent API |
-| `ELEVENLABS_AGENT_ID` | yes | Eleven Agents agent id (`agent_…`), **not** a voice id |
-| `CURSOR_API_KEY` | yes | Cloud Agents API |
-| `CURSOR_REPO_URL` | yes | Repo the cloud agent may change when fixing |
-| `ELEVENLABS_VOICE_ID` | no | Only for API-created agents; telephony uses `ELEVENLABS_AGENT_ID` |
-| `DATABASE_PATH` | no | Default `oncall.sqlite3` |
+| Variable                   | Required | Purpose                                                                                     |
+| -------------------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `TWILIO_ACCOUNT_SID`       | yes      | Twilio REST + webhook signature                                                             |
+| `TWILIO_AUTH_TOKEN`        | yes      | Twilio REST + webhook signature                                                             |
+| `TWILIO_FROM_NUMBER`       | yes      | E.164 outbound call + SMS from                                                              |
+| `TWILIO_MACHINE_DETECTION` | no       | Set `Enable` for AMD on **this app’s** outbound `calls.create` only; leave unset to disable |
+| `MAINTAINER_NUMBER`        | yes      | Who to call/text (also pass as `to_number` on `/alerts` if you prefer)                      |
+| `PUBLIC_BASE_URL`          | yes      | HTTPS base Twilio and ElevenLabs reach (e.g. ngrok)                                         |
+| `ELEVENLABS_API_KEY`       | yes      | `register-call` and agent API                                                               |
+| `ELEVENLABS_AGENT_ID`      | yes      | Eleven Agents agent id (`agent_…`), **not** a voice id                                      |
+| `CURSOR_API_KEY`           | yes      | Cloud Agents API                                                                            |
+| `CURSOR_REPO_URL`          | yes      | Repo the cloud agent may change when fixing                                                 |
+| `ELEVENLABS_VOICE_ID`      | no       | Only for API-created agents; telephony uses `ELEVENLABS_AGENT_ID`                           |
+| `DATABASE_PATH`            | no       | Default `oncall.sqlite3`                                                                    |
 
 **ElevenLabs API key (dashboard):** **ElevenAgents → Write** (required for `register-call`). **Voices → Read** optional. Do not put real secrets in `.env.example`.
 
@@ -128,13 +128,13 @@ Expect JSON with `incident_id` and `state` moving to `ringing` after Cursor diag
 
 ## HTTP surface
 
-| Method | Path | Who calls it |
-| --- | --- | --- |
-| POST | `/alerts` | Your monitor / you — opens or queues an Incident |
-| POST | `/twilio/voice` | Twilio — human → ElevenLabs TwiML; miss → hangup |
-| POST | `/twilio/status` | Twilio — miss reasons |
-| POST | `/twilio/sms` | Twilio — inbound SMS |
-| POST | `/v1/chat/completions` | ElevenLabs Custom LLM — speech turns |
+| Method | Path                   | Who calls it                                     |
+| ------ | ---------------------- | ------------------------------------------------ |
+| POST   | `/alerts`              | Your monitor / you — opens or queues an Incident |
+| POST   | `/twilio/voice`        | Twilio — human → ElevenLabs TwiML; miss → hangup |
+| POST   | `/twilio/status`       | Twilio — miss reasons                            |
+| POST   | `/twilio/sms`          | Twilio — inbound SMS                             |
+| POST   | `/v1/chat/completions` | ElevenLabs Custom LLM — speech turns             |
 
 ---
 
@@ -148,13 +148,13 @@ Give the agent only:
 
 Do not paste other components’ source. Run **their** tests until the brief’s “Done when” passes; wiring owner runs `python -m pytest -q` last.
 
-| Agent | Brief | Owns |
-| --- | --- | --- |
-| Seam | [00-seam.md](components/00-seam.md) | `seam.py`, `test_seam.py` |
-| Telephony | [01-telephony.md](components/01-telephony.md) | `telephony/`, `test_telephony.py` |
+| Agent          | Brief                                                   | Owns                                                 |
+| -------------- | ------------------------------------------------------- | ---------------------------------------------------- |
+| Seam           | [00-seam.md](components/00-seam.md)                     | `seam.py`, `test_seam.py`                            |
+| Telephony      | [01-telephony.md](components/01-telephony.md)           | `telephony/`, `test_telephony.py`                    |
 | Incident state | [02-incident-state.md](components/02-incident-state.md) | `machine.py`, `store.py`, …, `test_state_machine.py` |
-| Agent bridge | [03-agent-bridge.md](components/03-agent-bridge.md) | `bridge.py`, `cursor_client.py`, … |
-| Wiring | [04-wiring.md](components/04-wiring.md) | `app.py`, `service.py`, `test_wiring.py` |
+| Agent bridge   | [03-agent-bridge.md](components/03-agent-bridge.md)     | `bridge.py`, `cursor_client.py`, …                   |
+| Wiring         | [04-wiring.md](components/04-wiring.md)                 | `app.py`, `service.py`, `test_wiring.py`             |
 
 Order for **new** work: seam → (telephony ∥ state ∥ bridge) → wiring.
 

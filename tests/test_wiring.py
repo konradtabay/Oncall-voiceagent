@@ -7,6 +7,7 @@ import json
 from fastapi.testclient import TestClient
 
 from oncall.app import create_app
+from oncall.agents.cursor_impl import CursorImplementer
 from oncall.incident.cursor_client import CursorClient
 from oncall.incident.machine import Machine
 from oncall.incident.service import IncidentService
@@ -144,7 +145,11 @@ def _world(tmp_path):
         status_url="https://example.test/twilio/status",
     )
     service = IncidentService(
-        store, machine, ScriptCursor(), telephony, repo_url="https://example.test/repo"
+        store,
+        machine,
+        CursorImplementer(ScriptCursor()),
+        telephony,
+        repo_url="https://example.test/repo",
     )
     box["service"] = service
     app = create_app(service)
@@ -182,7 +187,7 @@ def test_alert_dials_after_diagnosis(tmp_path):
 
 def test_call_stays_up_until_verified_then_receipts(tmp_path):
     service, twilio, telephony, client = _world(tmp_path)
-    service._cursor_async = False
+    service._fix_async = False
     client.post(
         "/alerts",
         json={
@@ -225,7 +230,7 @@ def test_call_stays_up_until_verified_then_receipts(tmp_path):
 
 def test_elevenlabs_phase_execute_once_starts_fix(tmp_path):
     service, twilio, telephony, client = _world(tmp_path)
-    service._cursor_async = False
+    service._fix_async = False
     client.post(
         "/alerts",
         json={
@@ -240,13 +245,14 @@ def test_elevenlabs_phase_execute_once_starts_fix(tmp_path):
         {"CallSid": "CA1", "AnsweredBy": "human", "From": "+15550001111", "To": "+15555550100"},
         True,
     )
-    diagnose_runs = len(service.cursor.runs)
+    script = service.implementer._client
+    diagnose_runs = len(script.runs)
     response = client.post(
         "/elevenlabs/phase", json={"value": "execute", "incident_id": "inc-1"}
     )
     assert response.status_code == 200
     assert "i'll keep you updated" in response.json()["result"].lower()
-    assert len(service.cursor.runs) == diagnose_runs + 1
+    assert len(script.runs) == diagnose_runs + 1
     assert any("worker died" in message.lower() for message in twilio.sms)
     assert twilio.hungup == ["CA1"]
     assert service.store.get("inc-1").state == "closed"
