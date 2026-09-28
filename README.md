@@ -14,23 +14,34 @@ When they tell it to run the fix, a text goes out, the coding agent applies the 
 
 ## Quick start
 
+Install, then let a coding agent do the wiring:
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
+oncall agent quickstart
+```
+
+Paste the output into Cursor, Claude Code, or Codex. It walks through `.env`, tunnel, voice sync, and hooking your monitor to `/alerts`. See [AGENTS.md](AGENTS.md) and [docs/agent-quickstart.md](docs/agent-quickstart.md).
+
+After `.env` is ready:
+
+```bash
+oncall integration snippet alert    # test POST /alerts
+oncall integration snippet monitor  # cron-style health hook
+```
+
+### Manual setup
+
+```bash
+oncall quickstart    # human checklist in the terminal
 oncall check
+oncall voice sync    # after PUBLIC_BASE_URL is https
 oncall serve
 ```
 
-Fill `.env` from [.env.example](.env.example). Full walkthrough: [docs/setup.md](docs/setup.md). Coding agents: [docs/agents.md](docs/agents.md).
-
-Open an incident (uses Twilio and ElevenLabs credits):
-
-```bash
-curl -sS -X POST "$PUBLIC_BASE_URL/alerts" \
-  -H 'Content-Type: application/json' \
-  -d "{\"summary\":\"Worker down\",\"logs\":\"exit 1\",\"verify_target\":\"https://example.com/health\",\"to_number\":\"$MAINTAINER_NUMBER\"}"
-```
+Full walkthrough: [docs/setup.md](docs/setup.md). Coding agent backends: [docs/agents.md](docs/agents.md).
 
 ## Where companies use it
 

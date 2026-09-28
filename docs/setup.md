@@ -12,6 +12,8 @@ cp .env.example .env
 
 Requires Python 3.11+.
 
+Using Cursor, Claude, or Codex? Run `oncall agent quickstart` and paste the output into the chat ([agent-quickstart.md](agent-quickstart.md)).
+
 ## 2. Server
 
 ```bash

@@ -11,6 +11,12 @@ import httpx
 
 from oncall.config import Settings
 from oncall.env_loader import load_dotenv
+from oncall.integration import (
+    agent_quickstart_prompt,
+    alert_curl_snippet,
+    health_monitor_snippet,
+    human_quickstart,
+)
 from oncall.voice_sync import sync_agent
 
 _E164 = re.compile(r"^\+[1-9]\d{6,14}$")
@@ -231,6 +237,21 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     sub.add_parser("serve", help="Run the API on 127.0.0.1:8000")
+    sub.add_parser("quickstart", help="Human setup steps")
+    agent = sub.add_parser("agent", help="AI-assisted integration")
+    agent_sub = agent.add_subparsers(dest="agent_cmd", required=True)
+    agent_sub.add_parser(
+        "quickstart",
+        help="Print a checklist to paste into Cursor, Claude, Codex, etc.",
+    )
+    integration = sub.add_parser("integration", help="Integration snippets")
+    int_sub = integration.add_subparsers(dest="int_cmd", required=True)
+    int_snip = int_sub.add_parser("snippet", help="Copy-paste hooks")
+    int_snip.add_argument(
+        "kind",
+        choices=("alert", "monitor"),
+        help="alert: test curl; monitor: health-check loop",
+    )
     voice = sub.add_parser("voice", help="ElevenLabs voice")
     voice_sub = voice.add_subparsers(dest="voice_cmd", required=True)
     voice_sub.add_parser("sync", help="Sync agent tools to PUBLIC_BASE_URL")
@@ -240,6 +261,21 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(run_check(live=args.live))
     if args.cmd == "serve":
         raise SystemExit(run_serve())
+    if args.cmd == "quickstart":
+        print(human_quickstart())
+        raise SystemExit(0)
+    if args.cmd == "agent" and args.agent_cmd == "quickstart":
+        load_dotenv()
+        print(agent_quickstart_prompt(settings=Settings.from_env()))
+        raise SystemExit(0)
+    if args.cmd == "integration" and args.int_cmd == "snippet":
+        load_dotenv()
+        settings = Settings.from_env()
+        if args.kind == "alert":
+            print(alert_curl_snippet(settings))
+        else:
+            print(health_monitor_snippet(settings))
+        raise SystemExit(0)
     if args.cmd == "voice" and args.voice_cmd == "sync":
         raise SystemExit(run_voice_sync())
     parser.print_help()
