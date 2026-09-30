@@ -1,6 +1,6 @@
 # On-call
 
-A watched process goes down. This calls the person who can approve a fix, tells them what broke and the one fix, and runs it when they say yes. They stay on the line. A text goes out when the fix starts. They hear when the process is back.
+Voice agent that calls you the moment a training run dies. You talk to it, and it deploys the fix over the phone, from wherever you are.
 
 https://github.com/user-attachments/assets/cf582145-422d-4d0f-b7ee-9e362e37147e
 
